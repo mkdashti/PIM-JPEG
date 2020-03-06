@@ -1,0 +1,4 @@
+- Watched and got a good understanding of what is stored in jpeg compressed data : https://www.youtube.com/watch?v=f2odrCGjOFY
+- Printed markers in wall-murals-lale.jpg image in 2 different ways and studied them
+	The command is very useful for highlighting the markers: xxd -c16 -g1 -u wall-murals-lale.jpg | grep --color=always -C999 FF
+- Extract thumbnail if exists? Look at jfif extensions

@@ -1,0 +1,4 @@
+- Figure out the behaviour of decompressor when huffman table and dct table is unchanged but compressed data is missing for some parts?
+	- Do we also need to do line skipping correspondence in hufmann table? Because if we keep row 0 skip 1 keep 2 row 2 etc but don't change the correspondence in the table will it result in incorrect output? I think it will
+- Figure out the pixel block size or row block size
+

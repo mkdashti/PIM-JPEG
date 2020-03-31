@@ -1,0 +1,4 @@
+As of Mon, 30th of March morning:
+
+- For Goal#1, I emailed Professor Panos Nasiopoulos to get consultancy about JPEG file structure. The goal is to learn how to accurately identify MCU blocks. I am waiting for his answer
+- Was working on Goal#2 which is to write a downscaling with already implemented libjpeg-turbo functions. I faced linking problems while using gcc. It was the first time I faced such a problem. It took some time but I resolved the issue. Now I can succesfully build and run programs that uses libjpeg library functions.

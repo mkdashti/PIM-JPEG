@@ -1,0 +1,26 @@
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+from PIL import Image
+import numpy as np
+
+width = 450
+height = 700
+
+pixels = open("decompression_result.rgb", "rb")
+#Thanks to https://github.com/humbertokramm/RGB565toRGB888toPNG_-python-/blob/master/teste.py
+a = np.zeros((height,width,3),'uint8')
+x=0
+y=0
+for y in range(0,height):
+    for x in range(0, width):
+        print(pixels.read(8))
+        #r = int(pixels.read(8)) 
+        #g = int(pixels.read(8))
+        #b = int(pixels.read(8))
+        #a[y,x,0]= r
+        #a[y,x,1] = g
+        #a[y,x,2] = b
+
+new_image = Image.fromarray(a)
+new_image.save("check_image.jpg")
+

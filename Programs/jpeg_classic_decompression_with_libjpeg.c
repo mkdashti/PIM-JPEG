@@ -26,45 +26,30 @@ int main(void)
 	{
 		fprintf(stderr, "can't open the input file");
 	}
+	if ((outfile = fopen("decompression_result.rgb", "wb")) == NULL)
+	{
+		fprintf(stderr, "can't open the output file");
+	}
 	jpeg_stdio_src(&cinfo, infile); //CHECK THE FUNCTIONALITY OF THIS FUNCTION
 	jpeg_read_header(&cinfo, TRUE);
 	jpeg_start_decompress(&cinfo);
 	row_stride = cinfo.output_width * cinfo.output_components;
 	buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
+	int num_read_scanlines = 0;
 	while (cinfo.output_scanline < cinfo.output_height)
 	{
 		jpeg_read_scanlines(&cinfo, buffer, 1);
+		fputs(*buffer, outfile);
+		num_read_scanlines++;
 	}
+	printf("Number of scanlines read: %d\n", num_read_scanlines);
 	jpeg_finish_decompress(&cinfo);
 	jpeg_destroy_decompress(&cinfo);
 
-	/*outfile = fopen("decompression_output.txt", "w");
-	char *index = *buffer;
-	while(index){
-		fputs(index, outfile);
-		index++;
-	}
-//	fputs(*buffer, outfile);
-	fclose(outfile);
-	*/
-	/*
-	for (int pixel_index; pixel_index < image_width; pixel_index++)
-		{
-			for (int color_component = 0; color_component < 2; color_component++)
-			{
-				image_buffer[jsamparrow_index * image_height + pixel_index * image_width] = buffer[jsamparrow_index][pixel_index];
-			}
-		}
-	*/
-
-	/*for (int jsamparrow_index = 0; jsamparrow_index < image_height; jsamparrow_index++)
-	{
-		}
-	*/
-
 	//TODO: Need to put all the pixel RGB info consecutively in a buffer.
-	write_JPEG_file("result.jpg", 10);
+	fclose(outfile);
 	fclose(infile);
+	write_JPEG_file("result.jpg", 10);
 }
 
 /*

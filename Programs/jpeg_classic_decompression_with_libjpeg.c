@@ -36,10 +36,28 @@ int main(void)
 	row_stride = cinfo.output_width * cinfo.output_components;
 	buffer = (*cinfo.mem->alloc_sarray)((j_common_ptr)&cinfo, JPOOL_IMAGE, row_stride, 1);
 	int num_read_scanlines = 0;
-	while (cinfo.output_scanline < cinfo.output_height)
+
+	struct rgb_component
+	{
+		char r;
+		char g;
+		char b;
+	};
+
+	//while (cinfo.output_scanline < cinfo.output_height)
+	while (cinfo.output_scanline < 1)
+
 	{
 		jpeg_read_scanlines(&cinfo, buffer, 1);
-		fputs(*buffer, outfile);
+		for (int i = 0; i < 4; i++)
+		{
+			JSAMPLE cur_pixel = buffer[0][i];
+			char *cur_pixel_component = &cur_pixel;
+			//printf("Row %d pixel %d value is: %x, %x\n", num_read_scanlines, i, cur_pixel_component, cur_pixel_component++);
+			//printf("Row %d pixel %d value is: %x/n", num_read_scanlines, i, cur_pixel);
+
+			printf("Row %d pixel %d value is = %x\n", num_read_scanlines, i, buffer[0][i]);
+		}
 		num_read_scanlines++;
 	}
 	printf("Number of scanlines read: %d\n", num_read_scanlines);

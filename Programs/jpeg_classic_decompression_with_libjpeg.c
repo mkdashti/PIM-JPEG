@@ -2,16 +2,23 @@
 #include <stdlib.h>
 #include "../libjpeg-turbo/jpeglib.h"
 #include <setjmp.h>
-void write_JPEG_file(char *filename, int quality);
+#include <string.h>
+
+void write_JPEG_file(char *filename, int quality, int num_of_lines_to_skip);
 JSAMPLE *image_buffer;
 int image_height = 700; /* Number of rows in image */
 int image_width = 465;	/* Number of columns in image */
 
 //#include "../libjpeg-turbo/example.c"
 //In order to run this program succesfully on my PC, run gcc -o classic jpeg_classic_decompression_with_libjpeg.c -L../libjpeg-turbo/build -ljpeg -g
-int main(void)
+int main(int argc, char **argv)
 {
-	image_buffer = malloc(sizeof(char) * 3 * image_width * image_height); /* Points to large array of R,G,B-order data */
+	int num_of_lines_to_skip = atoi(argv[1]);
+	char *result_image_filename = malloc(20);
+	strcpy(result_image_filename, "result");
+	strcat(result_image_filename, argv[1]);
+	strcat(result_image_filename, ".jpg");
+	image_buffer = malloc(sizeof(char) * 3 * image_width * image_height / (num_of_lines_to_skip + 1)); /* Points to large array of R,G,B-order data */
 	struct jpeg_decompress_struct cinfo;
 	struct jpeg_error_mgr jerr;
 	cinfo.err = jpeg_std_error(&jerr);
@@ -45,31 +52,57 @@ int main(void)
 		char b;
 	};
 	char *current_index = image_buffer;
+	int lines_read = 0;
 	while (cinfo.output_scanline < cinfo.output_height)
 	{
 		jpeg_read_scanlines(&cinfo, buffer, 1);
-		for (int i = 0; i < image_width * 3; i++)
+		//jpeg_skip_scanlines(&cinfo, 1);
+		if (lines_read == 0)
 		{
-			JSAMPLE cur_pixel = buffer[0][i];
-			char *cur_pixel_component = &cur_pixel;
-			*current_index = *cur_pixel_component;
-			//fprintf(outfile, "%x", buffer[0][i]);
-			current_index++;
+			for (int i = 0; i < image_width * 3; i++)
+			{
+				JSAMPLE cur_pixel = buffer[0][i];
+				char *cur_pixel_component = &cur_pixel;
+				*current_index = *cur_pixel_component;
+				//fprintf(outfile, "%x", buffer[0][i]);
+				current_index++;
 
-			//printf("Row %d pixel %d value is: %x, %x\n", num_read_scanlines, i, cur_pixel_component, cur_pixel_component++);
-			//printf("Row %d pixel %d value is: %x/n", num_read_scanlines, i, cur_pixel);
-			//printf("Row %d pixel %d value is = %x\n", num_read_scanlines, i, buffer[0][i]);
+				//printf("Row %d pixel %d value is: %x, %x\n", num_read_scanlines, i, cur_pixel_component, cur_pixel_component++);
+				//printf("Row %d pixel %d value is: %x/n", num_read_scanlines, i, cur_pixel);
+				//printf("Row %d pixel %d value is = %x\n", num_read_scanlines, i, buffer[0][i]);
+			}
+			num_read_scanlines++;
+			lines_read++;
 		}
-		num_read_scanlines++;
+		else
+		{
+			lines_read++;
+		}
+		if ((num_of_lines_to_skip + 1) == lines_read)
+		{
+			lines_read = 0;
+		}
 	}
-	printf("Number of scanlines read: %d\n", num_read_scanlines);
+	printf("Number of scanlines decompressed: %d\n", num_read_scanlines);
 	jpeg_finish_decompress(&cinfo);
 	jpeg_destroy_decompress(&cinfo);
 
 	//TODO: Need to put all the pixel RGB info consecutively in a buffer.
 	//fclose(outfile);
 	fclose(infile);
-	write_JPEG_file("result.jpg", 100);
+	/*char *formed_filename = malloc(15);
+	char *str_num_of_lines_skipped = malloc(2);
+	*str_num_of_lines_skipped = (char)(num_of_lines_to_skip + 48);
+	*str_num_of_lines_skipped++ = 0;
+	strcpy(formed_filename, "result");
+	strcat(formed_filename, str_num_of_lines_skipped);
+	*/
+
+	write_JPEG_file(result_image_filename, 100, num_of_lines_to_skip);
+	//free(formed_filename);
+	//free(str_num_of_lines_skipped);
+	free(result_image_filename);
+	free(image_buffer);
 }
 
 /*
@@ -77,7 +110,7 @@ int main(void)
  * and a compression quality factor are passed in.
  */
 
-void write_JPEG_file(char *filename, int quality)
+void write_JPEG_file(char *filename, int quality, int num_of_lines_to_skip)
 {
 	/* This struct contains the JPEG compression parameters and pointers to
    * working space (which is allocated as needed by the JPEG library).
@@ -131,10 +164,10 @@ void write_JPEG_file(char *filename, int quality)
 	/* First we supply a description of the input image.
    * Four fields of the cinfo struct must be filled in:
    */
-	cinfo.image_width = image_width; /* image width and height, in pixels */
-	cinfo.image_height = image_height;
-	cinfo.input_components = 3;		/* # of color components per pixel */
-	cinfo.in_color_space = JCS_RGB; /* colorspace of input image */
+	cinfo.image_width = image_width;								/* image width and height, in pixels */
+	cinfo.image_height = image_height / (num_of_lines_to_skip + 1); //TODO: Adjust this according to number of lines skipped
+	cinfo.input_components = 3;										/* # of color components per pixel */
+	cinfo.in_color_space = JCS_RGB;									/* colorspace of input image */
 	/* Now use the library's routine to set default compression parameters.
    * (You must set at least cinfo.in_color_space before calling this,
    * since the defaults depend on the source color space.)

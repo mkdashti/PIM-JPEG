@@ -18,7 +18,7 @@ int main(void)
 	jpeg_create_decompress(&cinfo);
 
 	FILE *infile;
-	FILE *outfile = NULL;
+	//FILE *outfile = NULL;
 	JSAMPARRAY buffer; /* Output row buffer */
 
 	int row_stride;
@@ -26,10 +26,11 @@ int main(void)
 	{
 		fprintf(stderr, "can't open the input file");
 	}
-	if ((outfile = fopen("decompression_result.rgb", "wb")) == NULL)
+	/*if ((outfile = fopen("decompression_result.rgb", "wb")) == NULL)
 	{
 		fprintf(stderr, "can't open the output file");
 	}
+	*/
 	jpeg_stdio_src(&cinfo, infile); //CHECK THE FUNCTIONALITY OF THIS FUNCTION
 	jpeg_read_header(&cinfo, TRUE);
 	jpeg_start_decompress(&cinfo);
@@ -43,20 +44,21 @@ int main(void)
 		char g;
 		char b;
 	};
-
-	//while (cinfo.output_scanline < cinfo.output_height)
-	while (cinfo.output_scanline < 1)
-
+	char *current_index = image_buffer;
+	while (cinfo.output_scanline < cinfo.output_height)
 	{
 		jpeg_read_scanlines(&cinfo, buffer, 1);
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < image_width * 3; i++)
 		{
 			JSAMPLE cur_pixel = buffer[0][i];
 			char *cur_pixel_component = &cur_pixel;
+			*current_index = *cur_pixel_component;
+			//fprintf(outfile, "%x", buffer[0][i]);
+			current_index++;
+
 			//printf("Row %d pixel %d value is: %x, %x\n", num_read_scanlines, i, cur_pixel_component, cur_pixel_component++);
 			//printf("Row %d pixel %d value is: %x/n", num_read_scanlines, i, cur_pixel);
-
-			printf("Row %d pixel %d value is = %x\n", num_read_scanlines, i, buffer[0][i]);
+			//printf("Row %d pixel %d value is = %x\n", num_read_scanlines, i, buffer[0][i]);
 		}
 		num_read_scanlines++;
 	}
@@ -65,9 +67,9 @@ int main(void)
 	jpeg_destroy_decompress(&cinfo);
 
 	//TODO: Need to put all the pixel RGB info consecutively in a buffer.
-	fclose(outfile);
+	//fclose(outfile);
 	fclose(infile);
-	write_JPEG_file("result.jpg", 10);
+	write_JPEG_file("result.jpg", 100);
 }
 
 /*

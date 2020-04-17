@@ -177,6 +177,29 @@ void process_mcu(huffman_table *dc_table, huffman_table *ac_table,
     /*printf("]\n");*/
 }
 
+/**
+ * Removing any 0x00 bytes that were added as padding for a 0xFF byte
+ */
+/*void remove_padding_bytes()*/
+/*{*/
+    /*unsigned char tmp_buf[out_buf_index];*/
+    /*int tmp_buf_index = 0;*/
+
+    /*for (int i = 0; i < out_buf_index; i++) {*/
+        /*if (out_buf[i] != 0x00) {*/
+            /*tmp_buf[out_buf_index++] = out_buf[i];*/
+        /*}*/
+    /*}*/
+
+    /*if (tmp_buf_index != out_buf_index) {*/
+        /*for (int i = 0; i < tmp_buf_index; i++) {*/
+            /*out_buf[i] = tmp_buf[i];*/
+        /*}*/
+
+        /*out_buf_index = tmp_buf_index;*/
+    /*}*/
+/*}*/
+
 void process_scan(huffman_table *dc_table, huffman_table *ac_table)
 {
     printf("Processing Scan ");
@@ -204,6 +227,8 @@ void process_scan(huffman_table *dc_table, huffman_table *ac_table)
      * and see what sticks.
      */
     
+    set_processing_ecs_data(TRUE);
+
     write_buffer_to_file();
     int column_index = 0;
     unsigned short scan_buf = 0;
@@ -241,6 +266,8 @@ void process_scan(huffman_table *dc_table, huffman_table *ac_table)
             if (mcu_counter == 0) {
                 bit_index_of_previous_mcu_end = input_data_bit_index == 0 ? 7 : (input_data_bit_index - 1);
             } else if (out_buf_index >= 2) {
+                /*remove_padding_bytes();*/
+
                 unsigned char xfer_buf[out_buf_index];
                 int xfer_buf_index = 0; 
 
@@ -376,6 +403,7 @@ void process_scan(huffman_table *dc_table, huffman_table *ac_table)
         }
     }
 
+    set_processing_ecs_data(FALSE);
     fprintf(stdout, "Finished processing MCUs. Found %d MCU blocks\n", mcu_counter);
 }
 

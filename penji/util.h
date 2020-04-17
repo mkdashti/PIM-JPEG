@@ -28,6 +28,7 @@
 unsigned int last_byte_read;
 unsigned int last_marker_seen;
 
+unsigned char processing_ecs_data = FALSE;
 unsigned char bytes_to_buffer = FALSE;
 unsigned char *output_buffer;
 int *output_buffer_index;
@@ -46,6 +47,11 @@ void setup_output_buffer(unsigned char *out_buf, int *buf_index,
 void set_place_bytes_into_buffer(int value)
 {
     bytes_to_buffer = value;
+}
+
+void set_processing_ecs_data(int value)
+{
+    processing_ecs_data = value;
 }
 
 int write_buffer_to_file()
@@ -77,15 +83,32 @@ unsigned int read_1_byte(FILE *file, int *bytes_read)
     unsigned int c;
 
     c = getc(file);
-    place_byte_into_buffer(c);
-    if (c == EOF)
+
+    if (processing_ecs_data == TRUE && c == 0x00 && last_byte_read == 0xFF) {
+        c = getc(file);
+        place_byte_into_buffer(c);
+        *bytes_read++;
+    } else {
+        place_byte_into_buffer(c);
+    }
+
+    if (c == EOF) {
+       //printf("Premature EOF in JPEG file... Continuing\n");
        ERREXIT("Premature EOF in JPEG file"); 
+    }
+
     else if (c == 0x00 && last_byte_read == 0xFF) {
+        // FIXME: This branch shouldn't really be possible anymore
+        assert (FALSE);
+
         // We must have a stuff byte, read another byte
         c = getc(file);
         place_byte_into_buffer(c);
-        if (c == EOF)
+        if (c == EOF) {
+            //printf("Premature EOF in JPEG file... Continuing\n");
             ERREXIT("Premature EOF in JPEG file");
+        }
+
         *bytes_read++;
     } else if (last_byte_read == 0xFF && c != 0x00) {
         last_marker_seen = (0xFF << 8) + c;

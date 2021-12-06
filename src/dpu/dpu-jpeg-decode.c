@@ -31,11 +31,11 @@ void decode_bitstream(JpegDecompressor *d) {
 
   for (int row = 0; row < jpegInfo.mcu_height; row += jpegInfo.max_v_samp_factor) {
     for (int col = 0; col < jpegInfo.mcu_width; col += jpegInfo.max_h_samp_factor) {
-      if (is_eof(d)) {
-        // goto sync0;
-        synchronise_tasklets(d, row, col, previous_dcs);
-        return;
-      }
+      // if (is_eof(d)) {
+      // goto sync0;
+      //  synchronise_tasklets(d, row, col, previous_dcs);
+      //  return;
+      //}
 
       for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
         for (int y = 0; y < jpegInfo.color_components[color_index].v_samp_factor; y++) {
@@ -46,13 +46,13 @@ void decode_bitstream(JpegDecompressor *d) {
             }
 
             if (synch_mcu_index < 128) {
-              MCU_buffer_cache[d->tasklet_id][INDEX_OFFSET + synch_mcu_index] = d->file_index + d->cache_index;
-              MCU_buffer_cache[d->tasklet_id][DC_COEFF_OFFSET + synch_mcu_index] = MCU_buffer_cache[d->tasklet_id][0];
+              MCU_buffer_cache[0][INDEX_OFFSET + synch_mcu_index] = d->file_index + d->cache_index;
+              MCU_buffer_cache[0][DC_COEFF_OFFSET + synch_mcu_index] = MCU_buffer_cache[0][0];
               synch_mcu_index++;
             }
 
             int mcu_index = (((row + y) * jpegInfo.mcu_width_real + (col + x)) * 3 + color_index) << 6;
-            mram_write(MCU_buffer_cache[d->tasklet_id], &MCU_buffer[d->tasklet_id][mcu_index], MCU_READ_WRITE_SIZE0);
+            mram_write(MCU_buffer_cache[0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
           }
         }
       }
@@ -65,11 +65,11 @@ static void synchronise_tasklets(JpegDecompressor *d, int row, int col, short *p
   // The last tasklet cannot overflow, so it returns first
   int current_mcu_index = (row * jpegInfo.mcu_width_real + col) * 192;
   if (current_mcu_index > 16776960 / NR_TASKLETS) {
-    printf("Warning: Tasklet %d exceeded buffer size limit, output image is most likely malformed\n", d->tasklet_id);
+    printf("Warning: Tasklet %d exceeded buffer size limit, output image is most likely malformed\n", 0);
   }
 
-  if (d->tasklet_id == NR_TASKLETS - 1) {
-    jpegInfoDpu.mcu_end_index[d->tasklet_id] = current_mcu_index;
+  if (0 == NR_TASKLETS - 1) {
+    jpegInfoDpu.mcu_end_index[0] = current_mcu_index;
     return;
   }
 
@@ -83,10 +83,10 @@ static void synchronise_tasklets(JpegDecompressor *d, int row, int col, short *p
   for (; row < jpegInfo.mcu_height; row += jpegInfo.max_v_samp_factor) {
     for (; col < jpegInfo.mcu_width; col += jpegInfo.max_h_samp_factor) {
       if (num_synched_mcu_blocks >= minimum_synched_mcu_blocks + 1) {
-        jpegInfoDpu.mcu_end_index[d->tasklet_id] = (row * jpegInfo.mcu_width_real + col) * 192;
+        jpegInfoDpu.mcu_end_index[0] = (row * jpegInfo.mcu_width_real + col) * 192;
         int blocks_elapsed =
             (next_tasklet_mcu_blocks_elapsed / minimum_synched_mcu_blocks) * jpegInfo.max_h_samp_factor;
-        jpegInfoDpu.mcu_start_index[d->tasklet_id + 1] = blocks_elapsed * 192;
+        jpegInfoDpu.mcu_start_index[1] = blocks_elapsed * 192;
         // goto sync1;
         concat_adjust_mcus(d, row, col);
         return;
@@ -102,11 +102,10 @@ static void synchronise_tasklets(JpegDecompressor *d, int row, int col, short *p
             }
 
             short current_tasklet_file_index = d->file_index + d->cache_index;
-            short next_tasklet_file_index =
-                MCU_buffer_cache[d->tasklet_id + 1][INDEX_OFFSET + next_tasklet_mcu_blocks_elapsed];
+            short next_tasklet_file_index = MCU_buffer_cache[1][INDEX_OFFSET + next_tasklet_mcu_blocks_elapsed];
 
             int mcu_index = (((row + y) * jpegInfo.mcu_width_real + (col + x)) * 3 + color_index) << 6;
-            mram_write(MCU_buffer_cache[d->tasklet_id], &MCU_buffer[d->tasklet_id][mcu_index], MCU_READ_WRITE_SIZE0);
+            mram_write(MCU_buffer_cache[0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
 
             if (current_tasklet_file_index < next_tasklet_file_index) {
               // Tasklet i needs to decode more blocks
@@ -117,21 +116,18 @@ static void synchronise_tasklets(JpegDecompressor *d, int row, int col, short *p
               next_tasklet_mcu_blocks_elapsed++;
 
               while (current_tasklet_file_index > next_tasklet_file_index) {
-                next_tasklet_file_index =
-                    MCU_buffer_cache[d->tasklet_id + 1][INDEX_OFFSET + next_tasklet_mcu_blocks_elapsed];
+                next_tasklet_file_index = MCU_buffer_cache[1][INDEX_OFFSET + next_tasklet_mcu_blocks_elapsed];
                 next_tasklet_mcu_blocks_elapsed++;
               }
 
               if (current_tasklet_file_index == next_tasklet_file_index) {
-                jpegInfoDpu.dc_offset[d->tasklet_id][color_index] =
-                    MCU_buffer_cache[d->tasklet_id][0] -
-                    MCU_buffer_cache[d->tasklet_id + 1][DC_COEFF_OFFSET + next_tasklet_mcu_blocks_elapsed];
+                jpegInfoDpu.dc_offset[0][color_index] =
+                    MCU_buffer_cache[0][0] - MCU_buffer_cache[1][DC_COEFF_OFFSET + next_tasklet_mcu_blocks_elapsed];
                 num_synched_mcu_blocks++;
               }
             } else {
-              jpegInfoDpu.dc_offset[d->tasklet_id][color_index] =
-                  MCU_buffer_cache[d->tasklet_id][0] -
-                  MCU_buffer_cache[d->tasklet_id + 1][DC_COEFF_OFFSET + next_tasklet_mcu_blocks_elapsed];
+              jpegInfoDpu.dc_offset[0][color_index] =
+                  MCU_buffer_cache[0][0] - MCU_buffer_cache[1][DC_COEFF_OFFSET + next_tasklet_mcu_blocks_elapsed];
 
               num_synched_mcu_blocks++;
               next_tasklet_mcu_blocks_elapsed++;
@@ -146,7 +142,7 @@ static void synchronise_tasklets(JpegDecompressor *d, int row, int col, short *p
 
 static void concat_adjust_mcus(JpegDecompressor *d, int row, int col) {
   // Tasklet 0 does a one pass through all MCUs to adjust DC coefficients
-  if (d->tasklet_id != 0) {
+  if (0 != 0) {
     return;
   }
 
@@ -211,10 +207,10 @@ static int decode_mcu(JpegDecompressor *d, int component_index, short *previous_
     // Convert to negative coefficient
     coeff -= (1 << dc_length) - 1;
   }
-  MCU_buffer_cache[d->tasklet_id][0] = coeff + *previous_dc;
-  *previous_dc = MCU_buffer_cache[d->tasklet_id][0];
+  MCU_buffer_cache[0][0] = coeff + *previous_dc;
+  *previous_dc = MCU_buffer_cache[0][0];
   // Dequantization
-  MCU_buffer_cache[d->tasklet_id][0] *= q_table->table[0];
+  MCU_buffer_cache[0][0] *= q_table->table[0];
 
   // Get the AC values for this MCU block
   int i = 1;
@@ -228,7 +224,7 @@ static int decode_mcu(JpegDecompressor *d, int component_index, short *previous_
     // Got 0x00, fill remaining MCU block with 0s
     if (ac_length == 0x00) {
       while (i < 64) {
-        MCU_buffer_cache[d->tasklet_id][ZIGZAG_ORDER[i++]] = 0;
+        MCU_buffer_cache[0][ZIGZAG_ORDER[i++]] = 0;
       }
       break;
     }
@@ -248,7 +244,7 @@ static int decode_mcu(JpegDecompressor *d, int component_index, short *previous_
       return -1;
     }
     for (int j = 0; j < num_zeroes; j++) {
-      MCU_buffer_cache[d->tasklet_id][ZIGZAG_ORDER[i++]] = 0;
+      MCU_buffer_cache[0][ZIGZAG_ORDER[i++]] = 0;
     }
 
     if (coeff_length > 10) {
@@ -262,7 +258,7 @@ static int decode_mcu(JpegDecompressor *d, int component_index, short *previous_
         coeff -= (1 << coeff_length) - 1;
       }
       // Write coefficient to buffer as well as perform dequantization
-      MCU_buffer_cache[d->tasklet_id][ZIGZAG_ORDER[i]] = coeff * q_table->table[ZIGZAG_ORDER[i]];
+      MCU_buffer_cache[0][ZIGZAG_ORDER[i]] = coeff * q_table->table[ZIGZAG_ORDER[i]];
       i++;
     }
   }
@@ -326,15 +322,15 @@ static int get_num_bits(JpegDecompressor *d, int num_bits) {
 }
 
 void inverse_dct_convert(JpegDecompressor *d) {
-  int row = jpegInfoDpu.rows_per_tasklet * d->tasklet_id;
-  int end_row = jpegInfoDpu.rows_per_tasklet * (d->tasklet_id + 1);
+  int row = 0;
+  int end_row = jpegInfoDpu.rows_per_tasklet;
   if (row % 2 != 0) {
     row++;
   }
   if (end_row % 2 != 0) {
     end_row++;
   }
-  if (d->tasklet_id == NR_TASKLETS - 1) {
+  if (0 == NR_TASKLETS - 1) {
     end_row = jpegInfo.mcu_height;
   }
 
@@ -345,7 +341,7 @@ void inverse_dct_convert(JpegDecompressor *d) {
           for (int x = 0; x < jpegInfo.color_components[color_index].h_samp_factor; x++) {
             int mcu_index = (((row + y) * jpegInfo.mcu_width_real + (col + x)) * 3 + color_index) << 6;
             int cache_index = ((y << 8) + (y << 7)) + ((x << 7) + (x << 6)) + (color_index << 6);
-            mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[d->tasklet_id][cache_index], MCU_READ_WRITE_SIZE0);
+            mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[0][cache_index], MCU_READ_WRITE_SIZE0);
 
             // Compute inverse DCT with ANN algorithm
             inverse_dct_component(d, cache_index);
@@ -363,7 +359,7 @@ void inverse_dct_convert(JpegDecompressor *d) {
 
           ycbcr_to_rgb_pixel(d, cache_index, y, x);
 
-          mram_write(&MCU_buffer_cache[d->tasklet_id][cache_index], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE1);
+          mram_write(&MCU_buffer_cache[0][cache_index], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE1);
         }
       }
     }
@@ -375,24 +371,24 @@ static void inverse_dct_component(JpegDecompressor *d, int cache_index) {
   // and then bit shifted to the right at the end
   for (int i = 0; i < 8; i++) {
     // Higher accuracy
-    int g0 = (MCU_buffer_cache[d->tasklet_id][cache_index + (0 << 3) + i] * 181) >> 5;
-    int g1 = (MCU_buffer_cache[d->tasklet_id][cache_index + (4 << 3) + i] * 181) >> 5;
-    int g2 = (MCU_buffer_cache[d->tasklet_id][cache_index + (2 << 3) + i] * 59) >> 3;
-    int g3 = (MCU_buffer_cache[d->tasklet_id][cache_index + (6 << 3) + i] * 49) >> 4;
-    int g4 = (MCU_buffer_cache[d->tasklet_id][cache_index + (5 << 3) + i] * 71) >> 4;
-    int g5 = (MCU_buffer_cache[d->tasklet_id][cache_index + (1 << 3) + i] * 251) >> 5;
-    int g6 = (MCU_buffer_cache[d->tasklet_id][cache_index + (7 << 3) + i] * 25) >> 4;
-    int g7 = (MCU_buffer_cache[d->tasklet_id][cache_index + (3 << 3) + i] * 213) >> 5;
+    int g0 = (MCU_buffer_cache[0][cache_index + (0 << 3) + i] * 181) >> 5;
+    int g1 = (MCU_buffer_cache[0][cache_index + (4 << 3) + i] * 181) >> 5;
+    int g2 = (MCU_buffer_cache[0][cache_index + (2 << 3) + i] * 59) >> 3;
+    int g3 = (MCU_buffer_cache[0][cache_index + (6 << 3) + i] * 49) >> 4;
+    int g4 = (MCU_buffer_cache[0][cache_index + (5 << 3) + i] * 71) >> 4;
+    int g5 = (MCU_buffer_cache[0][cache_index + (1 << 3) + i] * 251) >> 5;
+    int g6 = (MCU_buffer_cache[0][cache_index + (7 << 3) + i] * 25) >> 4;
+    int g7 = (MCU_buffer_cache[0][cache_index + (3 << 3) + i] * 213) >> 5;
 
     // Lower accuracy
-    // int g0 = (MCU_buffer_cache[d->tasklet_id][cache_index + (0 << 3) + i] * 22) >> 2;
-    // int g1 = (MCU_buffer_cache[d->tasklet_id][cache_index + (4 << 3) + i] * 22) >> 2;
-    // int g2 = (MCU_buffer_cache[d->tasklet_id][cache_index + (2 << 3) + i] * 30) >> 2;
-    // int g3 = (MCU_buffer_cache[d->tasklet_id][cache_index + (6 << 3) + i] * 12) >> 2;
-    // int g4 = (MCU_buffer_cache[d->tasklet_id][cache_index + (5 << 3) + i] * 18) >> 2;
-    // int g5 = (MCU_buffer_cache[d->tasklet_id][cache_index + (1 << 3) + i] * 31) >> 2;
-    // int g6 = (MCU_buffer_cache[d->tasklet_id][cache_index + (7 << 3) + i] * 6) >> 2;
-    // int g7 = (MCU_buffer_cache[d->tasklet_id][cache_index + (3 << 3) + i] * 27) >> 2;
+    // int g0 = (MCU_buffer_cache[0][cache_index + (0 << 3) + i] * 22) >> 2;
+    // int g1 = (MCU_buffer_cache[0][cache_index + (4 << 3) + i] * 22) >> 2;
+    // int g2 = (MCU_buffer_cache[0][cache_index + (2 << 3) + i] * 30) >> 2;
+    // int g3 = (MCU_buffer_cache[0][cache_index + (6 << 3) + i] * 12) >> 2;
+    // int g4 = (MCU_buffer_cache[0][cache_index + (5 << 3) + i] * 18) >> 2;
+    // int g5 = (MCU_buffer_cache[0][cache_index + (1 << 3) + i] * 31) >> 2;
+    // int g6 = (MCU_buffer_cache[0][cache_index + (7 << 3) + i] * 6) >> 2;
+    // int g7 = (MCU_buffer_cache[0][cache_index + (3 << 3) + i] * 27) >> 2;
 
     int f4 = g4 - g7;
     int f5 = g5 + g6;
@@ -434,36 +430,36 @@ static void inverse_dct_component(JpegDecompressor *d, int cache_index) {
     int b4 = c4 - c8;
     int b6 = c6 - e7;
 
-    MCU_buffer_cache[d->tasklet_id][cache_index + (0 << 3) + i] = (b0 + e7) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (1 << 3) + i] = (b1 + b6) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (2 << 3) + i] = (b2 + c8) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (3 << 3) + i] = (b3 + b4) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (4 << 3) + i] = (b3 - b4) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (5 << 3) + i] = (b2 - c8) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (6 << 3) + i] = (b1 - b6) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (7 << 3) + i] = (b0 - e7) >> 4;
+    MCU_buffer_cache[0][cache_index + (0 << 3) + i] = (b0 + e7) >> 4;
+    MCU_buffer_cache[0][cache_index + (1 << 3) + i] = (b1 + b6) >> 4;
+    MCU_buffer_cache[0][cache_index + (2 << 3) + i] = (b2 + c8) >> 4;
+    MCU_buffer_cache[0][cache_index + (3 << 3) + i] = (b3 + b4) >> 4;
+    MCU_buffer_cache[0][cache_index + (4 << 3) + i] = (b3 - b4) >> 4;
+    MCU_buffer_cache[0][cache_index + (5 << 3) + i] = (b2 - c8) >> 4;
+    MCU_buffer_cache[0][cache_index + (6 << 3) + i] = (b1 - b6) >> 4;
+    MCU_buffer_cache[0][cache_index + (7 << 3) + i] = (b0 - e7) >> 4;
   }
 
   for (int i = 0; i < 8; i++) {
     // Higher accuracy
-    int g0 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 0] * 181) >> 5;
-    int g1 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 4] * 181) >> 5;
-    int g2 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 2] * 59) >> 3;
-    int g3 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 6] * 49) >> 4;
-    int g4 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 5] * 71) >> 4;
-    int g5 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 1] * 251) >> 5;
-    int g6 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 7] * 25) >> 4;
-    int g7 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 3] * 213) >> 5;
+    int g0 = (MCU_buffer_cache[0][cache_index + (i << 3) + 0] * 181) >> 5;
+    int g1 = (MCU_buffer_cache[0][cache_index + (i << 3) + 4] * 181) >> 5;
+    int g2 = (MCU_buffer_cache[0][cache_index + (i << 3) + 2] * 59) >> 3;
+    int g3 = (MCU_buffer_cache[0][cache_index + (i << 3) + 6] * 49) >> 4;
+    int g4 = (MCU_buffer_cache[0][cache_index + (i << 3) + 5] * 71) >> 4;
+    int g5 = (MCU_buffer_cache[0][cache_index + (i << 3) + 1] * 251) >> 5;
+    int g6 = (MCU_buffer_cache[0][cache_index + (i << 3) + 7] * 25) >> 4;
+    int g7 = (MCU_buffer_cache[0][cache_index + (i << 3) + 3] * 213) >> 5;
 
     // Lower accuracy
-    // int g0 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 0] * 22) >> 2;
-    // int g1 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 4] * 22) >> 2;
-    // int g2 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 2] * 30) >> 2;
-    // int g3 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 6] * 12) >> 2;
-    // int g4 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 5] * 18) >> 2;
-    // int g5 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 1] * 31) >> 2;
-    // int g6 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 7] * 6) >> 2;
-    // int g7 = (MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 3] * 27) >> 2;
+    // int g0 = (MCU_buffer_cache[0][cache_index + (i << 3) + 0] * 22) >> 2;
+    // int g1 = (MCU_buffer_cache[0][cache_index + (i << 3) + 4] * 22) >> 2;
+    // int g2 = (MCU_buffer_cache[0][cache_index + (i << 3) + 2] * 30) >> 2;
+    // int g3 = (MCU_buffer_cache[0][cache_index + (i << 3) + 6] * 12) >> 2;
+    // int g4 = (MCU_buffer_cache[0][cache_index + (i << 3) + 5] * 18) >> 2;
+    // int g5 = (MCU_buffer_cache[0][cache_index + (i << 3) + 1] * 31) >> 2;
+    // int g6 = (MCU_buffer_cache[0][cache_index + (i << 3) + 7] * 6) >> 2;
+    // int g7 = (MCU_buffer_cache[0][cache_index + (i << 3) + 3] * 27) >> 2;
 
     int f4 = g4 - g7;
     int f5 = g5 + g6;
@@ -505,14 +501,14 @@ static void inverse_dct_component(JpegDecompressor *d, int cache_index) {
     int b4 = c4 - c8;
     int b6 = c6 - e7;
 
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 0] = (b0 + e7) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 1] = (b1 + b6) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 2] = (b2 + c8) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 3] = (b3 + b4) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 4] = (b3 - b4) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 5] = (b2 - c8) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 6] = (b1 - b6) >> 4;
-    MCU_buffer_cache[d->tasklet_id][cache_index + (i << 3) + 7] = (b0 - e7) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 0] = (b0 + e7) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 1] = (b1 + b6) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 2] = (b2 + c8) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 3] = (b3 + b4) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 4] = (b3 - b4) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 5] = (b2 - c8) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 6] = (b1 - b6) >> 4;
+    MCU_buffer_cache[0][cache_index + (i << 3) + 7] = (b0 - e7) >> 4;
   }
 }
 
@@ -529,15 +525,10 @@ static void ycbcr_to_rgb_pixel(JpegDecompressor *d, int cache_index, int v, int 
       int cbcr_pixel_col = x / max_h + 4 * h;
       int cbcr_pixel = (cbcr_pixel_row << 3) + cbcr_pixel_col + 64;
 
-      short r =
-          MCU_buffer_cache[d->tasklet_id][pixel] + ((45 * MCU_buffer_cache[d->tasklet_id][64 + cbcr_pixel]) >> 5) + 128;
-      short g =
-          MCU_buffer_cache[d->tasklet_id][pixel] -
-          ((11 * MCU_buffer_cache[d->tasklet_id][cbcr_pixel] + 23 * MCU_buffer_cache[d->tasklet_id][64 + cbcr_pixel]) >>
-           5) +
-          128;
-      short b =
-          MCU_buffer_cache[d->tasklet_id][pixel] + ((113 * MCU_buffer_cache[d->tasklet_id][cbcr_pixel]) >> 6) + 128;
+      short r = MCU_buffer_cache[0][pixel] + ((45 * MCU_buffer_cache[0][64 + cbcr_pixel]) >> 5) + 128;
+      short g = MCU_buffer_cache[0][pixel] -
+                ((11 * MCU_buffer_cache[0][cbcr_pixel] + 23 * MCU_buffer_cache[0][64 + cbcr_pixel]) >> 5) + 128;
+      short b = MCU_buffer_cache[0][pixel] + ((113 * MCU_buffer_cache[0][cbcr_pixel]) >> 6) + 128;
 
       if (r < 0)
         r = 0;
@@ -552,9 +543,9 @@ static void ycbcr_to_rgb_pixel(JpegDecompressor *d, int cache_index, int v, int 
       if (b > 255)
         b = 255;
 
-      MCU_buffer_cache[d->tasklet_id][pixel] = r;
-      MCU_buffer_cache[d->tasklet_id][64 + pixel] = g;
-      MCU_buffer_cache[d->tasklet_id][128 + pixel] = b;
+      MCU_buffer_cache[0][pixel] = r;
+      MCU_buffer_cache[0][64 + pixel] = g;
+      MCU_buffer_cache[0][128 + pixel] = b;
     }
   }
 }
@@ -571,8 +562,8 @@ void crop(JpegDecompressor *d, int start_x, int start_y, int new_width, int new_
     for (int col = 0; col < new_mcu_width; col++) {
       int mcu_index = (((row + start_row) * jpegInfo.mcu_width_real + (col + start_col)) * 3) << 6;
       int new_mcu_index = ((row * new_mcu_width + col) * 3) << 6;
-      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[d->tasklet_id][0], MCU_READ_WRITE_SIZE1);
-      mram_write(&MCU_buffer_cache[d->tasklet_id][0], &MCU_buffer[0][new_mcu_index], MCU_READ_WRITE_SIZE1);
+      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[0][0], MCU_READ_WRITE_SIZE1);
+      mram_write(&MCU_buffer_cache[0][0], &MCU_buffer[0][new_mcu_index], MCU_READ_WRITE_SIZE1);
     }
   }
 
@@ -599,19 +590,19 @@ void jpeg_scale(JpegDecompressor *d, int x_scale_factor, int y_scale_factor) {
     for (int col = 0; col < jpegInfo.mcu_width_real; col++) {
       for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
         int mcu_index = ((row * jpegInfo.mcu_width_real + col) * 3 + color_index) << 6;
-        mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[d->tasklet_id][0], MCU_READ_WRITE_SIZE0);
+        mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[0][0], MCU_READ_WRITE_SIZE0);
         for (int y = 0; y < temp0; y++) {
           for (int x = 0; x < temp1; x++) {
             int sum = 0;
             for (int i = 0; i < y_scale_factor; i++) {
               for (int j = 0; j < x_scale_factor; j++) {
-                sum += MCU_buffer_cache[d->tasklet_id][(((y << y_shift) + i) << 3) + (x << x_shift) + j];
+                sum += MCU_buffer_cache[0][(((y << y_shift) + i) << 3) + (x << x_shift) + j];
               }
             }
-            MCU_buffer_cache[d->tasklet_id][(y << 3) + x] = sum >> (x_shift + y_shift);
+            MCU_buffer_cache[0][(y << 3) + x] = sum >> (x_shift + y_shift);
           }
         }
-        mram_write(&MCU_buffer_cache[d->tasklet_id][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
+        mram_write(&MCU_buffer_cache[0][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
       }
     }
   }
@@ -629,18 +620,17 @@ void jpeg_scale(JpegDecompressor *d, int x_scale_factor, int y_scale_factor) {
         for (int i = 0; i < y_scale_factor; i++) {
           for (int j = 0; j < x_scale_factor; j++) {
             int exact_portion_index = general_portion_index + (((i * jpegInfo.mcu_width_real + j) * 3) << 6);
-            mram_read(&MCU_buffer[0][exact_portion_index], &MCU_buffer_cache[d->tasklet_id][64], MCU_READ_WRITE_SIZE0);
+            mram_read(&MCU_buffer[0][exact_portion_index], &MCU_buffer_cache[0][64], MCU_READ_WRITE_SIZE0);
 
             for (int y = 0; y < temp0; y++) {
               for (int x = 0; x < temp1; x++) {
-                MCU_buffer_cache[d->tasklet_id][((y + i * temp0) << 3) + (x + j * temp1)] =
-                    MCU_buffer_cache[d->tasklet_id][64 + y * 8 + x];
+                MCU_buffer_cache[0][((y + i * temp0) << 3) + (x + j * temp1)] = MCU_buffer_cache[0][64 + y * 8 + x];
               }
             }
           }
         }
 
-        mram_write(&MCU_buffer_cache[d->tasklet_id][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
+        mram_write(&MCU_buffer_cache[0][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE0);
       }
     }
   }
@@ -652,9 +642,9 @@ void jpeg_scale(JpegDecompressor *d, int x_scale_factor, int y_scale_factor) {
 }
 
 void horizontal_flip(JpegDecompressor *d) {
-  int row = jpegInfoDpu.rows_per_tasklet * d->tasklet_id;
-  int end_row = jpegInfoDpu.rows_per_tasklet * (d->tasklet_id + 1);
-  if (d->tasklet_id == NR_TASKLETS - 1) {
+  int row = 0;
+  int end_row = jpegInfoDpu.rows_per_tasklet;
+  if (0 == NR_TASKLETS - 1) {
     end_row = jpegInfo.mcu_height;
   }
 
@@ -662,33 +652,33 @@ void horizontal_flip(JpegDecompressor *d) {
     for (int col = 0; col < jpegInfo.mcu_width_real / 2; col++) {
       int mcu_index = ((row * jpegInfo.mcu_width_real + col) * 3) << 6;
       int target_mcu_index = mcu_index + (((jpegInfo.mcu_width_real - (col << 1) - 1) * 3) << 6);
-      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[d->tasklet_id][0], MCU_READ_WRITE_SIZE1);
-      mram_read(&MCU_buffer[0][target_mcu_index], &MCU_buffer_cache[d->tasklet_id][192], MCU_READ_WRITE_SIZE1);
+      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[0][0], MCU_READ_WRITE_SIZE1);
+      mram_read(&MCU_buffer[0][target_mcu_index], &MCU_buffer_cache[0][192], MCU_READ_WRITE_SIZE1);
 
       for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
         for (int y = 0; y < 8; y++) {
           for (int x = 0; x < 8; x++) {
             int left_index = (y << 3) + x + (color_index << 6);
             int right_index = 192 + (y << 3) + (7 - x) + (color_index << 6);
-            short temp0 = MCU_buffer_cache[d->tasklet_id][left_index];
-            MCU_buffer_cache[d->tasklet_id][left_index] = MCU_buffer_cache[d->tasklet_id][right_index];
-            MCU_buffer_cache[d->tasklet_id][right_index] = temp0;
+            short temp0 = MCU_buffer_cache[0][left_index];
+            MCU_buffer_cache[0][left_index] = MCU_buffer_cache[0][right_index];
+            MCU_buffer_cache[0][right_index] = temp0;
           }
         }
       }
 
-      mram_write(&MCU_buffer_cache[d->tasklet_id][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE1);
-      mram_write(&MCU_buffer_cache[d->tasklet_id][192], &MCU_buffer[0][target_mcu_index], MCU_READ_WRITE_SIZE1);
+      mram_write(&MCU_buffer_cache[0][0], &MCU_buffer[0][mcu_index], MCU_READ_WRITE_SIZE1);
+      mram_write(&MCU_buffer_cache[0][192], &MCU_buffer[0][target_mcu_index], MCU_READ_WRITE_SIZE1);
     }
   }
 }
 
-MUTEX_INIT(sum_rgb_lock);
+// MUTEX_INIT(sum_rgb_lock);
 
 void find_sum_rgb(JpegDecompressor *d) {
-  int row = jpegInfoDpu.rows_per_tasklet * d->tasklet_id;
-  int end_row = jpegInfoDpu.rows_per_tasklet * (d->tasklet_id + 1);
-  if (d->tasklet_id == NR_TASKLETS - 1) {
+  int row = 0;
+  int end_row = jpegInfoDpu.rows_per_tasklet;
+  if (0 == NR_TASKLETS - 1) {
     end_row = jpegInfo.mcu_height;
   }
 
@@ -697,18 +687,18 @@ void find_sum_rgb(JpegDecompressor *d) {
   for (; row < end_row; row++) {
     for (int col = 0; col < jpegInfo.mcu_width_real; col++) {
       int mcu_index = ((row * jpegInfo.mcu_width_real + col) * 3) << 6;
-      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[d->tasklet_id][0], MCU_READ_WRITE_SIZE1);
+      mram_read(&MCU_buffer[0][mcu_index], &MCU_buffer_cache[0][0], MCU_READ_WRITE_SIZE1);
       for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
         for (int i = 0; i < 64; i++) {
-          sum_rgb[color_index] += MCU_buffer_cache[d->tasklet_id][(color_index << 6) + i];
+          sum_rgb[color_index] += MCU_buffer_cache[0][(color_index << 6) + i];
         }
       }
     }
   }
 
-  mutex_lock(sum_rgb_lock);
+  // mutex_lock(sum_rgb_lock);
   for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
     jpegInfoDpu.sum_rgb[color_index] += sum_rgb[color_index];
   }
-  mutex_unlock(sum_rgb_lock);
+  // mutex_unlock(sum_rgb_lock);
 }

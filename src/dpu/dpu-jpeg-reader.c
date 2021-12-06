@@ -14,12 +14,12 @@ void init_file_reader_index(JpegDecompressor *d) {
 }
 
 void init_jpeg_decompressor(JpegDecompressor *d) {
-  int file_index = jpegInfo.image_data_start + jpegInfo.size_per_tasklet * d->tasklet_id;
+  int file_index = jpegInfo.image_data_start;
   // Calculating offset so that mram_read is 8 byte aligned
   int offset = file_index % 8;
   d->file_index = file_index - offset - PREFETCH_SIZE;
   d->cache_index = offset + PREFETCH_SIZE;
-  d->length = jpegInfo.image_data_start + jpegInfo.size_per_tasklet * (d->tasklet_id + 1);
+  d->length = jpegInfo.image_data_start + jpegInfo.size_per_tasklet;
   if (d->length > jpegInfo.length) {
     d->length = jpegInfo.length;
   }

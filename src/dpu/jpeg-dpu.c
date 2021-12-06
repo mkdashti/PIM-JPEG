@@ -211,18 +211,18 @@ static void crop_and_scale(JpegDecompressor *d) {
 int main() {
   JpegDecompressor decompressor;
   decompressor.length = input.file_length;
-  decompressor.tasklet_id = me();
+  // decompressor.tasklet_id = me();
+  decompressor.tasklet_id = 0;
   jpegInfo.length = decompressor.length;
 
-  if (decompressor.tasklet_id == 0) {
-    int error = read_all_markers(&decompressor);
-    if (error) {
-      return error;
-    }
+  //  if (decompressor.tasklet_id == 0) {
+  int error = read_all_markers(&decompressor);
+  if (error) {
+    return error;
   }
+  //}
 
   // All tasklets should wait until tasklet 0 has finished reading all JPEG markers
-  barrier_wait(&init_barrier);
 
   init_jpeg_decompressor(&decompressor);
 
@@ -232,12 +232,9 @@ int main() {
     return 1;
   }
 
-  // All tasklets should wait until tasklet 0 has finished adjusting the DC coefficients
-  barrier_wait(&idct_barrier);
   inverse_dct_convert(&decompressor);
 
-  barrier_wait(&crop_barrier);
-  if (decompressor.tasklet_id == 0) {
+  /*if (decompressor.tasklet_id == 0) {
     crop_and_scale(&decompressor);
   }
 
@@ -246,10 +243,8 @@ int main() {
     horizontal_flip(&decompressor);
   }
 
-  barrier_wait(&prep1_barrier);
+  barrier_wait(&prep1_barrier);*/
   find_sum_rgb(&decompressor);
-
-  barrier_wait(&prep2_barrier);
 
   for (int color_index = 0; color_index < jpegInfo.num_color_components; color_index++) {
     output.sum_rgb[color_index] = jpegInfoDpu.sum_rgb[color_index];
